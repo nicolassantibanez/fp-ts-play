@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "plugins": [
+      {
+        "name": "@unsplash/ts-namespace-import-plugin",
+        "namespace": {
+          "E": {
+            "importPath": "fp-ts/Either"
+          },
+          "O": {
+            "importPath": "fp-ts/Option"
+          }
+        }
+      }
+    ]
+  },
+  "include": ["src"]
+}
+

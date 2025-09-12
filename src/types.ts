@@ -1,3 +1,8 @@
+type NetworkError = { type: "NetworkError"; error: unknown };
+type HttpError = { type: "HttpError"; status: number; statusText: string };
+type ParseError = { type: "ParseError"; error: unknown };
+type NotFoundError = { type: "NotFoundError"; error: unknown };
+type AppError = NetworkError | HttpError | ParseError | NotFoundError;
 type Currency = "USD" | "CLP" | "MXN";
 
 type CreditNote = Readonly<{
@@ -8,6 +13,8 @@ type CreditNote = Readonly<{
   type: "credit_note";
   reference: string;
 }>;
+
+type AmountByReference = Record<string, number>;
 
 type PaymentPending = Readonly<{
   id: string;
@@ -22,6 +29,17 @@ type PaymentPaid = Readonly<{
 }>;
 
 type Payment = PaymentPending | PaymentPaid;
+
+type PaymentStatus = "paid" | "wrong_amount";
+
+type PaymentResp = {
+  status: PaymentStatus;
+};
+
+type PaidPaymentStatus = {
+  payment: Payment;
+  status: PaymentStatus;
+};
 
 type InvoiceReceived = Readonly<{
   id: string;
@@ -38,9 +56,3 @@ type OrganizationSettings = Readonly<{
 }>;
 
 type Invoice = InvoiceReceived | CreditNote;
-
-type NetworkError = { type: "NetworkError"; error: unknown };
-type HttpError = { type: "HttpError"; status: number; statusText: string };
-type ParseError = { type: "ParseError"; error: unknown };
-type FixError = { type: "FixError"; error: unknown };
-type AppError = NetworkError | HttpError | ParseError | FixError;

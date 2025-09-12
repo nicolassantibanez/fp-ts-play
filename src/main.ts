@@ -264,13 +264,20 @@ async function main() {
     TE.map(groupInvoicesByOrg),
     TE.map(R.toEntries),
     // TE.map(A.map(([clientId, invs]) => processClientInvoices(clientId, invs)))
-    TE.chain(([clientId, invs]) =>
-      TE.sequenceArray(processClientInvoices(clientId, invs))
+    TE.chain((items) =>
+      TE.sequenceArray(
+        A.map<
+          [string, NEA.NonEmptyArray<Invoice>],
+          TE.TaskEither<AppError, readonly number[]>
+        >(([clientId, invs]) => processClientInvoices(clientId, invs))(items)
+      )
     )
   );
 
-  const part1 = await TE.sequenceArray(result)();
+  const part1 = await result();
   console.log("Result:", part1);
+  // const part1 = await TE.sequenceArray(result)();
+  // console.log("Result:", part1);
 }
 
 const logIO =

@@ -26,6 +26,7 @@ const fetchTE = (...args: Parameters<typeof fetch>) =>
       () => fetch(...args),
       (e): NetworkError => ({ type: "NetworkError", error: e })
     ),
+    //TE.Fold
     TE.flatMap((res) =>
       res.ok
         ? TE.right(res)
@@ -35,6 +36,7 @@ const fetchTE = (...args: Parameters<typeof fetch>) =>
             statusText: res.statusText,
           })
     ),
+    //Esto podria ser funcion aparte.
     TE.flatMap((res) =>
       TE.tryCatch(
         () => res.json(),
@@ -43,6 +45,8 @@ const fetchTE = (...args: Parameters<typeof fetch>) =>
     )
   );
 
+// Usar nombres de args mas descriptivo: e.g: maybeInvoice
+// Este es un buen uso de io-ts y scehma.
 const isInvoice = (x: any): x is Invoice =>
   x &&
   typeof x === "object" &&
@@ -51,6 +55,7 @@ const isInvoice = (x: any): x is Invoice =>
   typeof x.amount === "number" &&
   typeof x.currency === "string";
 
+//Nombres completos (isPaymentResponse)  
 const isPaymentResp = (x: any): x is PaymentResp =>
   x &&
   typeof x === "object" &&
@@ -63,10 +68,12 @@ const isOrganizationSettings = (x: any): x is OrganizationSettings =>
   typeof x.organization_id === "string" &&
   (x.currency === "USD" || x.currency === "CLP" || x.currency === "MXN");
 
+// Aqui para ahorrarte el tipeo puedes hacer pipe seguirdo del maybeInvoice
 const validateInvoice = E.fromPredicate<unknown, Invoice, ParseError>(
   (maybeInvoice) => isInvoice(maybeInvoice),
   () => ({ type: "ParseError" as const, error: "Not a valid Invoice" })
 );
+
 
 const validatePaymentResp = E.fromPredicate<unknown, PaymentResp, ParseError>(
   (maybePS) => isPaymentResp(maybePS),
@@ -83,6 +90,7 @@ const parseInvoicesE = (data: unknown): E.Either<ParseError, Invoice[]> =>
     E.chain(A.traverse(E.Applicative)(validateInvoice))
   );
 
+// Evitar pipe anidados, si hay otro pipe es signo de que es otra funcion
 const getInvoices: TE.TaskEither<AppError, Invoice[]> = pipe(
   fetchTE(PENDING_INVOICES_URL),
   TE.chain((data) =>
@@ -93,6 +101,7 @@ const getInvoices: TE.TaskEither<AppError, Invoice[]> = pipe(
     )
   )
 );
+
 
 const parseOrganizationSettings = (
   data: unknown
@@ -105,6 +114,7 @@ const parseOrganizationSettings = (
     }))
   );
 
+// Mismo de los pipe  
 const getOrganizationSettings = (
   organizationId: string
 ): TE.TaskEither<AppError, OrganizationSettings> =>
@@ -116,6 +126,8 @@ const getOrganizationSettings = (
 const parsePaymentResp = (data: unknown): E.Either<ParseError, PaymentResp> =>
   pipe(data, validatePaymentResp);
 
+
+// Mismo tema de los pipe
 const payPayment = (
   payment: PaymentPending
 ): TE.TaskEither<AppError, PaidPaymentStatus> =>
@@ -138,6 +150,8 @@ const payPayment = (
     )
   );
 
+
+// Esto no se usa?
 const printCurr =
   (prefix: string = "") =>
   <T>(a: T) => {
@@ -145,11 +159,13 @@ const printCurr =
     return a;
   };
 
+
 const isInvoicedReceived = (inv: Invoice) => inv.type === "received";
 const isCreditNote = (inv: Invoice) => inv.type === "credit_note";
 const isPaymentPending = (p: Payment) => p.status === "pending";
 const isPaymentPaid = (p: Payment) => p.status === "paid";
 
+//E.fromPredicate
 const partitionInvoices = (
   inv: Invoice
 ): E.Either<InvoiceReceived, CreditNote> =>
@@ -168,6 +184,8 @@ const convertToCurrency =
     return usdAmount * USD_RATE[to];
   };
 
+
+  //double pipe
 const getTotalCreditNoteByRef =
   (targetCurrency: Currency) =>
   (creditNotes: CreditNote[]): AmountByReference =>
@@ -185,6 +203,8 @@ const getTotalCreditNoteByRef =
       )
     );
 
+
+ //Deja declarado el Ord por fuera (lo que esta dentro del pipe) y usar el sortBy   
 const sortPaymentsByAmount = A.sortBy([
   pipe(
     N.Ord,
@@ -207,6 +227,8 @@ const groupInvoicesByOrg = (
     NEA.groupBy((inv) => inv.organization_id)
   );
 
+
+// triple pipe  
 const processInvoicePayment =
   (cns: AmountByReference, config: OrganizationSettings) =>
   (invoice: InvoiceReceived): TE.TaskEither<AppError, PaidPaymentStatus[]> =>
@@ -256,11 +278,15 @@ const processClientInvoices = (
     TE.flatMap((config) => pipe(invoices, processInvoices(config)))
   );
 
+
+// Mapear a tasks y usar el A.sequence por fuera  
 const payPayments = (
   payments: PaymentPending[]
 ): TE.TaskEither<AppError, PaidPaymentStatus[]> =>
   pipe(payments, A.map(payPayment), A.sequence(TE.ApplicativePar));
 
+
+//Quizas el reducer afuera del pipe  
 const discountPayments =
   (initialDiscount: number) =>
   (payments: PaymentPending[]): PaymentPending[] =>

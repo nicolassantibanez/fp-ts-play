@@ -5,14 +5,14 @@ type NotFoundError = { type: "NotFoundError"; error: unknown };
 type AppError = NetworkError | HttpError | ParseError | NotFoundError;
 type Currency = "USD" | "CLP" | "MXN";
 
-type CreditNote = Readonly<{
+type CreditNote = {
   id: string;
   amount: number;
   currency: Currency;
   organization_id: string;
   type: "credit_note";
   reference: string;
-}>;
+};
 
 type AmountByReference = Record<string, number>;
 
@@ -32,7 +32,7 @@ type Payment = PaymentPending | PaymentPaid;
 
 type PaymentStatus = "paid" | "wrong_amount";
 
-type PaymentResp = {
+type PaymentResponseType = {
   status: PaymentStatus;
 };
 
@@ -41,14 +41,14 @@ type PaidPaymentStatus = {
   status: PaymentStatus;
 };
 
-type InvoiceReceived = Readonly<{
+type InvoiceReceived = {
   id: string;
   amount: number;
   currency: Currency;
   organization_id: string;
   type: "received";
   payments: Payment[];
-}>;
+};
 
 type OrganizationSettings = Readonly<{
   organization_id: string;

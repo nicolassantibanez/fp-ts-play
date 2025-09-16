@@ -26,6 +26,7 @@ const getResponseJsonTE = (res: Response) =>
     (e): ParseError => ({ type: "ParseError", error: e })
   );
 
+//Typificar el rertorno
 const fetchTE = (...args: Parameters<typeof fetch>) =>
   pipe(
     TE.tryCatch(
@@ -95,9 +96,7 @@ const validatePaymentResp = (maybePaymentResponse: unknown) =>
     )
   );
 
-const parseInvoicesE = (
-  maybeInvoices: unknown
-): E.Either<ParseError, Invoice[]> =>
+const parseInvoicesE = (maybeInvoices: JSON): E.Either<ParseError, Invoice[]> =>
   pipe(
     maybeInvoices,
     E.fromPredicate(Array.isArray, () => ({
@@ -107,7 +106,8 @@ const parseInvoicesE = (
     E.chain(A.traverse(E.Applicative)(validateInvoice))
   );
 
-const parseInvoicesTE = (data: unknown) =>
+//Typificar retornoo y no usar unknown
+const parseInvoicesTE = (data: JSON) =>
   pipe(data, parseInvoicesE, TE.fromEither);
 
 const getInvoices: TE.TaskEither<AppError, Invoice[]> = pipe(
@@ -256,9 +256,8 @@ const processPayments =
       A.sortBy([sortByAmount]),
       A.map(changePendingPaymentCurrency(invoiceCurrency, settingsCurrency)),
       discountPayments(discount),
-      // discountPayemnts(discount),
       payPayments,
-      A.sequence(TE.ApplicativePar)
+      A.sequence(TE.ApplicativeSeq)
     );
 
 const processInvoicePayments =
@@ -279,7 +278,7 @@ const processReceivedInvoices =
     pipe(
       receivedInvoices,
       A.map(processInvoicePayments(amountByReference, organizationSettings)),
-      A.sequence(TE.ApplicativeSeq),
+      A.sequence(TE.ApplicativePar),
       TE.map(A.flatten)
     );
 
@@ -311,26 +310,6 @@ const payPayments = (
 ): TE.TaskEither<AppError, PaidPaymentStatus>[] =>
   pipe(payments, A.map(payPayment));
 
-// const discountPayments =
-//   (initialDiscount: number) =>
-//   (payments: PaymentPending[]): PaymentPending[] =>
-//     pipe(
-//       payments,
-//       A.reduce<
-//         PaymentPending,
-//         { discount: number; processed: PaymentPending[] }
-//       >({ discount: initialDiscount, processed: [] }, (state, p) =>
-//         pipe(p, discountPayment(state.discount), (newPayment) => {
-//           const discountLeft = Math.max(state.discount - p.amount, 0);
-//           return {
-//             discount: discountLeft,
-//             processed: [...state.processed, newPayment],
-//           };
-//         })
-//       ),
-//       (state) => state.processed
-//     );
-
 const applyDiscountToPayment =
   (discount: number, processed: PaymentPending[]) =>
   (payment: PaymentPending) =>
@@ -339,46 +318,37 @@ const applyDiscountToPayment =
       processed: [...processed, newPayment],
     }));
 
-const discountPayemnts = (initialDiscount: number) =>
-  A.reduce<PaymentPending, { discount: number; processed: PaymentPending[] }>(
-    { discount: initialDiscount, processed: [] as PaymentPending[] },
-    (state, payment) =>
-      applyDiscountToPayment(state.discount, state.processed)(payment)
-  );
-
 const discountPayments =
   (initialDiscount: number) =>
   (payments: PaymentPending[]): PaymentPending[] =>
     pipe(
       payments,
-      A.reduce<
-        PaymentPending,
-        { discount: number; processed: PaymentPending[] }
-      >({ discount: initialDiscount, processed: [] }, (state, p) =>
-        pipe(p, discountPayment(state.discount), (newPayment) => {
-          const discountLeft = Math.max(state.discount - p.amount, 0);
-          return {
-            discount: discountLeft,
-            processed: [...state.processed, newPayment],
-          };
-        })
+      A.reduce(
+        { discount: initialDiscount, processed: [] as PaymentPending[] },
+        (state, payment) =>
+          applyDiscountToPayment(state.discount, state.processed)(payment)
       ),
       (state) => state.processed
     );
+
+const processClients = (
+  invoicesByOrganization: Record<string, NEA.NonEmptyArray<Invoice>>
+): TE.TaskEither<AppError, PaidPaymentStatus[]> =>
+  pipe(
+    invoicesByOrganization,
+    R.mapWithIndex(processClientInvoices),
+    R.toArray,
+    A.map(([, invoices]) => invoices),
+    A.sequence(TE.ApplicativePar),
+    TE.map(A.flatten)
+  );
 
 async function main() {
   const process = pipe(
     getInvoices,
     TE.map(groupInvoicesByOrg),
-    TE.map(R.toEntries),
-    TE.flatMap((items) =>
-      pipe(
-        items,
-        A.map(([clientId, invs]) => processClientInvoices(clientId, invs)),
-        A.sequence(TE.ApplicativeSeq),
-        TE.map(A.flatten)
-      )
-    )
+    TE.map(processClients),
+    TE.flatten
   );
 
   const result = await process();

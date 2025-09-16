@@ -1,11 +1,13 @@
 import * as E from "fp-ts/Either";
 import * as A from "fp-ts/lib/Array";
 import * as NEA from "fp-ts/lib/NonEmptyArray";
+import * as Sep from "fp-ts/lib/Separated";
 import * as TE from "fp-ts/lib/TaskEither";
 import * as N from "fp-ts/number";
 import * as O from "fp-ts/Option";
 import { contramap } from "fp-ts/Ord";
 import * as R from "fp-ts/Record";
+import * as S from "fp-ts/string";
 
 import * as util from "util";
 
@@ -27,7 +29,9 @@ const getResponseJsonTE = (res: Response) =>
   );
 
 //Typificar el rertorno
-const fetchTE = (...args: Parameters<typeof fetch>) =>
+const fetchTE = (
+  ...args: Parameters<typeof fetch>
+): TE.TaskEither<ParseError | NetworkError | HttpError, any> =>
   pipe(
     TE.tryCatch(
       () => fetch(...args),
@@ -96,7 +100,9 @@ const validatePaymentResp = (maybePaymentResponse: unknown) =>
     )
   );
 
-const parseInvoicesE = (maybeInvoices: JSON): E.Either<ParseError, Invoice[]> =>
+const parseInvoicesE = (
+  maybeInvoices: unknown
+): E.Either<ParseError, Invoice[]> =>
   pipe(
     maybeInvoices,
     E.fromPredicate(Array.isArray, () => ({
@@ -107,7 +113,7 @@ const parseInvoicesE = (maybeInvoices: JSON): E.Either<ParseError, Invoice[]> =>
   );
 
 //Typificar retornoo y no usar unknown
-const parseInvoicesTE = (data: JSON) =>
+const parseInvoicesTE = (data: unknown) =>
   pipe(data, parseInvoicesE, TE.fromEither);
 
 const getInvoices: TE.TaskEither<AppError, Invoice[]> = pipe(
@@ -283,17 +289,16 @@ const processReceivedInvoices =
     );
 
 const processInvoices =
-  (config: OrganizationSettings) =>
-  (invoices: Invoice[]): TE.TaskEither<AppError, PaidPaymentStatus[]> =>
+  (invoices: Invoice[]) =>
+  (
+    config: OrganizationSettings
+  ): TE.TaskEither<AppError, PaidPaymentStatus[]> =>
     pipe(
       invoices,
       A.partitionMap(partitionInvoices),
-      ({ left: creditNotes, right: received }) =>
-        pipe(
-          creditNotes,
-          getTotalCreditNoteByRef(config.currency),
-          processReceivedInvoices(received, config)
-        )
+      Sep.mapLeft(getTotalCreditNoteByRef(config.currency)),
+      ({ left: amountByReference, right: received }) =>
+        processReceivedInvoices(received, config)(amountByReference)
     );
 
 const processClientInvoices = (
@@ -302,7 +307,7 @@ const processClientInvoices = (
 ): TE.TaskEither<AppError, PaidPaymentStatus[]> =>
   pipe(
     getOrganizationSettings(clientId),
-    TE.flatMap((config) => pipe(invoices, processInvoices(config)))
+    TE.flatMap(processInvoices(invoices))
   );
 
 const payPayments = (
@@ -337,8 +342,7 @@ const processClients = (
   pipe(
     invoicesByOrganization,
     R.mapWithIndex(processClientInvoices),
-    R.toArray,
-    A.map(([, invoices]) => invoices),
+    R.collect(S.Ord)((_, results) => results),
     A.sequence(TE.ApplicativePar),
     TE.map(A.flatten)
   );
